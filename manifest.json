@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "ATS LinkedIn Scraper",
+  "version": "1.0",
+  "description": "Auto-syncs LinkedIn profile data to Airtable ATS on page visit.",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://api.airtable.com/*"
+  ],
+  "content_scripts": [{
+    "matches": ["https://www.linkedin.com/in/*"],
+    "js": ["content.js"],
+    "css": ["styles.css"],
+    "run_at": "document_idle"
+  }],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ATS LinkedIn Scraper"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}

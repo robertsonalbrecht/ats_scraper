@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ATS LinkedIn Scraper — Settings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 640px;
+      margin: 40px auto;
+      padding: 0 24px 60px;
+      color: #1d2129;
+      background: #fff;
+    }
+    h1 { font-size: 22px; color: #0a66c2; margin-bottom: 4px; }
+    h2 {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 32px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    label {
+      display: block;
+      margin: 16px 0 4px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    input:focus { outline: 2px solid #0a66c2; border-color: transparent; }
+    .hint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 3px;
+    }
+    .field-row {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .field-row span {
+      font-size: 13px;
+      color: #444;
+      text-align: right;
+      padding-right: 8px;
+    }
+    .field-row input { margin: 0; }
+    .actions {
+      margin-top: 28px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    button {
+      padding: 9px 20px;
+      border: none;
+      border-radius: 5px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #saveBtn { background: #0a66c2; color: #fff; }
+    #saveBtn:hover { background: #004182; }
+    #testBtn { background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; }
+    #testBtn:hover { background: #c8e6c9; }
+    #statusMsg {
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: 4px;
+    }
+    #statusMsg.ok   { background: #e8f5e9; color: #1b5e20; }
+    #statusMsg.fail { background: #fdecea; color: #b71c1c; }
+  </style>
+</head>
+<body>
+  <h1>ATS LinkedIn Scraper</h1>
+  <p style="color:#555; font-size:14px; margin-top:4px;">Configure your Airtable connection and field name mappings.</p>
+
+  <h2>Airtable Credentials</h2>
+
+  <label for="apiKey">Personal Access Token</label>
+  <input type="password" id="apiKey" placeholder="patXXXXXXXX.XXXXXXXXXXXXXXXX">
+  <p class="hint">Create one at airtable.com/account → Developer hub → Personal access tokens. Requires <code>data.records:read</code> and <code>data.records:write</code> scopes.</p>
+
+  <label for="baseId">Base ID</label>
+  <input type="text" id="baseId" placeholder="appXXXXXXXXXXXXXX">
+  <p class="hint">Found in the Airtable API docs URL for your base: airtable.com/appXXXXX/api/docs</p>
+
+  <label for="tableId">Table ID or Table Name</label>
+  <input type="text" id="tableId" placeholder="tblXXXXXXXXXXXXXX or Candidates">
+  <p class="hint">Use the table's ID (tbl...) for reliability, or the exact table name.</p>
+
+  <h2>Field Name Mappings</h2>
+  <p style="font-size:13px;color:#666;margin-top:-8px;">Map each data field to the exact column name in your Airtable table.</p>
+
+  <div id="fieldMappings"></div>
+
+  <div class="actions">
+    <button id="saveBtn">Save Settings</button>
+    <button id="testBtn">Test Connection</button>
+    <span id="statusMsg"></span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
