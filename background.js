@@ -2,7 +2,6 @@
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const AIRTABLE_BASE_URL = 'https://api.airtable.com/v0';
-const DEBOUNCE_MS = 1500;
 
 const DEFAULT_FIELD_MAP = {
   linkedinUrl:      'LinkedIn URL',
@@ -17,13 +16,8 @@ const DEFAULT_FIELD_MAP = {
   skills:           'Skills',
   photoUrl:         'Photo URL',
   connectionDegree: 'Connection Degree',
-  followers:        'Followers',
-  connections:      'Connections',
   lastSynced:       'Last Synced',
 };
-
-// Per-tab debounce timers: tabId → timeoutId
-const debounceMap = new Map();
 
 // ── Config loading ─────────────────────────────────────────────────────────
 async function loadConfig() {
@@ -111,8 +105,6 @@ async function syncToAirtable(profileData) {
       skills:           data.skills,
       photoUrl:         data.photoUrl,
       connectionDegree: data.connectionDegree,
-      followers:        data.followers,
-      connections:      data.connections,
     };
 
     for (const [key, value] of Object.entries(mapping)) {
@@ -159,15 +151,16 @@ async function syncToAirtable(profileData) {
         skills:           profileData.skills,
         photoUrl:         profileData.photoUrl,
         connectionDegree: profileData.connectionDegree,
-        followers:        profileData.followers,
-        connections:      profileData.connections,
       };
+
+      // These fields are always overwritten so the most complete scraped data wins
+      const alwaysUpdate = new Set(['workHistory', 'education', 'skills']);
 
       for (const [key, newValue] of Object.entries(mapping)) {
         const fieldName = fieldMap[key];
         if (!fieldName || isBlank(newValue)) continue;
-        // Only patch if existing field is blank
-        if (isBlank(existingFields[fieldName])) {
+        // Always overwrite list fields; only patch other fields when blank
+        if (alwaysUpdate.has(key) || isBlank(existingFields[fieldName])) {
           patch[fieldName] = newValue;
         }
       }
@@ -196,43 +189,16 @@ async function saveLastSync(data) {
 }
 
 // ── Message handler ────────────────────────────────────────────────────────
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+// Process immediately — content.js already debounces before sending.
+// No setTimeout here: MV3 service workers can be terminated before a delayed
+// callback fires, causing silent sync failures.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type !== 'SYNC_PROFILE') return false;
 
-  const tabId = sender.tab?.id;
+  syncToAirtable(message.data)
+    .then(result => sendResponse(result))
+    .catch(err => sendResponse({ error: err.message }));
 
-  // Debounce per tab
-  if (tabId && debounceMap.has(tabId)) {
-    clearTimeout(debounceMap.get(tabId));
-  }
-
-  const timerId = setTimeout(async () => {
-    if (tabId) debounceMap.delete(tabId);
-    try {
-      const result = await syncToAirtable(message.data);
-      sendResponse(result);
-    } catch (err) {
-      sendResponse({ error: err.message });
-    }
-  }, DEBOUNCE_MS);
-
-  if (tabId) debounceMap.set(tabId, timerId);
-
-  // Keep message channel open for async sendResponse
+  // Return true to keep the message channel open for the async response
   return true;
-});
-
-// ── SPA navigation backup: re-inject content script on LinkedIn profile URLs ──
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status !== 'complete') return;
-  if (!tab.url || !/linkedin\.com\/in\//.test(tab.url)) return;
-
-  // Re-inject content script to handle SPA navigation where manifest
-  // content_scripts may not re-fire
-  chrome.scripting.executeScript({
-    target: { tabId },
-    files: ['content.js'],
-  }).catch(() => {
-    // Tab may have navigated away or script already running — ignore
-  });
 });

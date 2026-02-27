@@ -4,6 +4,15 @@ document.getElementById('optionsLink').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 
+// Enable/disable toggle
+const toggle = document.getElementById('enableToggle');
+chrome.storage.local.get(['enabled'], (result) => {
+  toggle.checked = result.enabled !== false; // default on
+});
+toggle.addEventListener('change', () => {
+  chrome.storage.local.set({ enabled: toggle.checked });
+});
+
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   const tab = tabs[0];
   const box = document.getElementById('statusBox');

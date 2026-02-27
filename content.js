@@ -2,14 +2,23 @@
   'use strict';
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let lastUrl = window.location.href;
+  let lastUrl = '';
   let indicator = null;
   let extractionTimeout = null;
   let observer = null;
+  let extensionEnabled = true; // kept in sync with chrome.storage; true by default
+
+  // Initialise from storage immediately so the flag is accurate before init() runs
+  chrome.storage.local.get(['enabled'], (r) => { extensionEnabled = r.enabled !== false; });
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function normalizeProfileUrl(href) {
+    const match = href.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/([^/?#]+)/);
+    return match ? `https://www.linkedin.com/in/${match[1]}/` : href.split('?')[0];
   }
 
   function safeText(el) {
@@ -41,6 +50,19 @@
     if (indicator && document.body.contains(indicator)) return indicator;
     indicator = document.createElement('div');
     indicator.id = 'ats-status-indicator';
+
+    const textEl = document.createElement('span');
+    textEl.id = 'ats-status-text';
+    indicator.appendChild(textEl);
+
+    const btn = document.createElement('button');
+    btn.id = 'ats-sync-btn';
+    btn.textContent = '↺ Sync';
+    btn.addEventListener('click', () => {
+      if (!btn.disabled) runSync();
+    });
+    indicator.appendChild(btn);
+
     document.body.appendChild(indicator);
     return indicator;
   }
@@ -49,8 +71,12 @@
     const el = ensureIndicator();
     el.classList.remove('ats-fade-out');
     el.dataset.state = state;
-    el.textContent = message;
-    el.style.opacity = '1';
+
+    const textEl = el.querySelector('#ats-status-text');
+    if (textEl) textEl.textContent = message;
+
+    const btn = el.querySelector('#ats-sync-btn');
+    if (btn) btn.disabled = (state === 'syncing');
 
     if (state === 'success') {
       setTimeout(() => {
@@ -247,37 +273,72 @@
     } catch { return []; }
   }
 
-  async function extractProfileData() {
-    const profileUrl = window.location.href.split('?')[0];
+  async function extractAllExperiences() {
+    // Already on the experience detail page — scrape it directly
+    if (/\/details\/experience/.test(window.location.href)) {
+      const container = findSectionByHeading('experience') || safeQuery('main') || document.body;
+      await expandSection(container);
+      return parseExperienceItems(container);
+    }
 
-    // Expand sections before scraping
+    // Look for a "Show all X experiences" link inside the experience section
     const expSection = findSectionByHeading('experience');
+    const showAllLink = safeQuery('a[href*="/details/experience"]', expSection || document);
+
+    if (!showAllLink) {
+      // All experiences are already shown inline
+      await expandSection(expSection);
+      return parseExperienceItems(expSection);
+    }
+
+    // Navigate to the full experience detail page
+    showAllLink.click();
+    await sleep(2500);
+
+    // Scrape all experiences from the detail page
+    const container = findSectionByHeading('experience') || safeQuery('main') || document.body;
+    await expandSection(container);
+    const items = parseExperienceItems(container);
+
+    // Navigate back to the main profile
+    window.history.back();
+    await sleep(1500);
+
+    return items;
+  }
+
+  async function extractProfileData() {
+    const profileUrl = normalizeProfileUrl(window.location.href);
+
+    // Extract all stable fields from the main page before any navigation
+    const name = extractName();
+    const headline = extractHeadline();
+    const location = extractLocation();
+    const photoUrl = extractPhotoUrl();
+    const about = extractAbout();
+    const connectionDegree = extractConnectionDegree();
+    const { followers, connections } = extractFollowersConnections();
+
+    // Expand and extract education/skills (inline, no navigation needed)
     const eduSection = findSectionByHeading('education');
     const skillSection = findSectionByHeading('skills');
-
-    await Promise.all([
-      expandSection(expSection),
-      expandSection(eduSection),
-      expandSection(skillSection),
-    ]);
-
-    const workHistory = parseExperienceItems(expSection);
+    await Promise.all([expandSection(eduSection), expandSection(skillSection)]);
     const education = parseEducationItems(eduSection);
     const skills = parseSkillItems(skillSection);
 
-    const { followers, connections } = extractFollowersConnections();
+    // Extract all experiences — navigates to detail page and back if needed
+    const workHistory = await extractAllExperiences();
 
-    // Derive current company/title from first work history entry
     const currentEntry = workHistory[0] || {};
 
     return {
       linkedinUrl: profileUrl,
-      fullName: extractName(),
-      headline: extractHeadline(),
-      location: extractLocation(),
-      photoUrl: extractPhotoUrl(),
-      about: extractAbout(),
-      connectionDegree: extractConnectionDegree(),
+      fullName: name,
+      headline,
+      location,
+      photoUrl,
+      about,
+      connectionDegree,
       followers,
       connections,
       currentTitle: currentEntry.title || null,
@@ -290,6 +351,7 @@
 
   // ── Main sync flow ─────────────────────────────────────────────────────────
   async function runSync() {
+    if (!extensionEnabled) return;
     setStatus('syncing', '↑ Syncing...');
 
     let profileData;
@@ -346,8 +408,9 @@
   }
 
   function init() {
-    if (!isProfilePage()) return;
+    if (!isProfilePage() || !extensionEnabled) return;
 
+    lastUrl = normalizeProfileUrl(window.location.href);
     ensureIndicator();
     scheduleSync();
 
@@ -356,9 +419,9 @@
     }
 
     observer = new MutationObserver(() => {
-      const currentUrl = window.location.href;
-      if (currentUrl !== lastUrl) {
-        lastUrl = currentUrl;
+      const currentNormalized = normalizeProfileUrl(window.location.href);
+      if (currentNormalized !== lastUrl) {
+        lastUrl = currentNormalized;
         if (isProfilePage()) {
           scheduleSync();
         }
@@ -367,6 +430,24 @@
 
     observer.observe(document.body, { childList: true, subtree: true });
   }
+
+  // React to enable/disable toggle changes from the popup
+  chrome.storage.onChanged.addListener((changes) => {
+    if (!('enabled' in changes)) return;
+    extensionEnabled = changes.enabled.newValue !== false;
+
+    if (!extensionEnabled) {
+      // Kill any pending sync immediately
+      if (extractionTimeout) { clearTimeout(extractionTimeout); extractionTimeout = null; }
+      if (observer) observer.disconnect();
+      if (indicator && document.body.contains(indicator)) {
+        indicator.style.display = 'none';
+      }
+    } else if (isProfilePage()) {
+      if (indicator) indicator.style.display = '';
+      init();
+    }
+  });
 
   // Entry point — run after document_idle
   if (document.readyState === 'loading') {
