@@ -300,9 +300,14 @@
     await expandSection(container);
     const items = parseExperienceItems(container);
 
-    // Navigate back to the main profile
+    // Navigate back to the main profile.
+    // Set a sessionStorage flag first — if history.back() causes a full page
+    // reload (which happens on some profiles), the fresh content script will
+    // find this flag in init() and skip the auto-sync, breaking the loop.
+    sessionStorage.setItem('ats-returning', '1');
     window.history.back();
     await sleep(1500);
+    sessionStorage.removeItem('ats-returning'); // clean up for SPA-nav case
 
     return items;
   }
@@ -411,8 +416,15 @@
     if (!isProfilePage() || !extensionEnabled) return;
 
     lastUrl = normalizeProfileUrl(window.location.href);
-    ensureIndicator();
-    scheduleSync();
+
+    // If we just navigated back from the experience detail page and it caused
+    // a full page reload, skip the auto-sync to break the loop.
+    if (sessionStorage.getItem('ats-returning')) {
+      sessionStorage.removeItem('ats-returning');
+    } else {
+      ensureIndicator();
+      scheduleSync();
+    }
 
     if (observer) {
       observer.disconnect();

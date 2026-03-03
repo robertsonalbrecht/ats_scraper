@@ -3,6 +3,12 @@
   "name": "ATS LinkedIn Scraper",
   "version": "1.0",
   "description": "Auto-syncs LinkedIn profile data to Airtable ATS on page visit.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ats-scraper@extension",
+      "strict_min_version": "121.0"
+    }
+  },
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": [
     "https://www.linkedin.com/*",
@@ -15,7 +21,8 @@
     "run_at": "document_idle"
   }],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
   },
   "action": {
     "default_popup": "popup.html",
