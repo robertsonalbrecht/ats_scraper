@@ -42,10 +42,11 @@ function renderFieldMappings(savedMap) {
 }
 
 // Load saved settings
-chrome.storage.local.get(['apiKey', 'baseId', 'tableId', 'fieldMap'], (stored) => {
-  document.getElementById('apiKey').value  = stored.apiKey  || '';
-  document.getElementById('baseId').value  = stored.baseId  || '';
-  document.getElementById('tableId').value = stored.tableId || '';
+chrome.storage.local.get(['apiKey', 'baseId', 'tableId', 'fieldMap', 'recruitmentAppUrl'], (stored) => {
+  document.getElementById('apiKey').value            = stored.apiKey            || '';
+  document.getElementById('baseId').value            = stored.baseId            || '';
+  document.getElementById('tableId').value           = stored.tableId           || '';
+  document.getElementById('recruitmentAppUrl').value = stored.recruitmentAppUrl || '';
   renderFieldMappings(stored.fieldMap || {});
 });
 
@@ -57,9 +58,10 @@ document.getElementById('saveBtn').addEventListener('click', () => {
   });
 
   const data = {
-    apiKey:   document.getElementById('apiKey').value.trim(),
-    baseId:   document.getElementById('baseId').value.trim(),
-    tableId:  document.getElementById('tableId').value.trim(),
+    apiKey:             document.getElementById('apiKey').value.trim(),
+    baseId:             document.getElementById('baseId').value.trim(),
+    tableId:            document.getElementById('tableId').value.trim(),
+    recruitmentAppUrl:  document.getElementById('recruitmentAppUrl').value.trim(),
     fieldMap,
   };
 

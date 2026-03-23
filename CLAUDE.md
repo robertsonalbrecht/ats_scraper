@@ -55,8 +55,9 @@ README.md        One-liner project description
 - `apiKey` — Airtable Personal Access Token
 - `baseId` — Airtable Base ID (app...)
 - `tableId` — Airtable Table ID or name
+- `recruitmentAppUrl` — Base URL of the Lancor Recruitment App (default: `http://localhost:3000`). Set in Options. Used by popup to fetch active searches and send candidates via prefill.
 - `fieldMap` — Object mapping data keys to Airtable column names (see below)
-- `lastSync` — Object: `{ profileUrl, action, recordId, timestamp }` (written after each sync)
+- `lastSync` — Object: `{ profileUrl, action, recordId, timestamp, profileData }` (written after each sync). `profileData` contains the full scraped profile including `workHistory` as a JSON string.
 
 ### fieldMap Keys (defaults)
 ```
@@ -117,6 +118,34 @@ The Personal Access Token needs scopes: `data.records:read`, `data.records:write
 
 ---
 
+---
+
+## Recruitment App Integration
+
+### New Popup Section
+When the current tab is a LinkedIn profile **and** a sync has already occurred for that profile, the popup displays a "Send to Recruitment App" section below the sync status. This section is purely additive — existing popup behavior is unchanged.
+
+**Employer selector** — Parses `lastSync.profileData.workHistory` (a JSON string) into an array of `{ title, company, dates, description }` items. Filters for active roles by checking that `dates` is null/blank or contains "Present" (case-insensitive). PE candidates often hold simultaneous roles at a fund and a portfolio company, so multiple active positions may appear.
+
+**Search project selector** — Fetches `GET [recruitmentAppUrl]/api/searches/active` and renders results as a dropdown. Shows a loading state while fetching and an error state (red border + message) if the fetch fails.
+
+**Send button** — POSTs to `[recruitmentAppUrl]/api/candidates/prefill` with:
+- `fullName`, `location`, `linkedinUrl` from profileData
+- `currentTitle` and `currentCompany` overridden by the selected employer dropdown entry
+- `workHistory` (full parsed array)
+- `searchId` from the selected search project
+
+Shows `✓ Sent` + green status on success, or error text on failure (button re-enables for retry).
+
+### Recruitment App Endpoints
+- `GET /api/searches/active` — Returns `[{ id, name }]` for all searches with `status === 'active'` or `'open'`
+- `POST /api/candidates/prefill` — Accepts `{ fullName, currentTitle, currentCompany, location, linkedinUrl, workHistory, searchId }`. Creates candidate in pool and (if `searchId` provided) adds to search pipeline at "Pursuing" stage. Returns `{ id: candidate_id }`. 409 if a candidate with the same LinkedIn URL already exists.
+
+### Host Permissions
+`http://localhost:*/*` is added to `manifest.json` `host_permissions` so the popup can fetch from the default localhost:3000 recruitment app. For non-localhost deployments, add the appropriate URL pattern to `host_permissions` and reload the extension.
+
+---
+
 ## Actions Taken
 
 ### Session 1 — 2026-02-24
@@ -126,6 +155,18 @@ The Personal Access Token needs scopes: `data.records:read`, `data.records:write
 - Implemented dual-layer SPA navigation handling
 - Implemented smart Airtable upsert (never overwrite, always update Last Synced)
 - Implemented status indicator injected into LinkedIn DOM with auto-fade on success
+
+---
+
+### Session 2 — 2026-03-22
+- Added `GET /api/searches/active` endpoint to Lancor recruitment app
+- Added `POST /api/candidates/prefill` endpoint to Lancor recruitment app
+- Added `recruitmentAppUrl` storage key — saved/loaded via Options page
+- Added "Recruitment App" section to `options.html` with URL input
+- Added "Send to Recruitment App" popup section with employer dropdown, search project dropdown, and send button
+- Updated `background.js` (minimal change): `saveLastSync` calls now include `profileData` so popup can read workHistory
+- Added `http://localhost:*/*` to `manifest.json` `host_permissions`
+- Updated `CLAUDE.md` with documentation for all new fields and endpoints
 
 ---
 

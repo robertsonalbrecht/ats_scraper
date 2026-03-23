@@ -312,7 +312,161 @@
     return items;
   }
 
+  // ── LinkedIn Recruiter extraction ───────────────────────────────────────────
+  function recruiterExtractName() {
+    try {
+      const el = safeQuery('[data-test-row-lockup-full-name] .artdeco-entity-lockup__title')
+        || safeQuery('[data-test-row-lockup-full-name]');
+      return safeText(el);
+    } catch { return null; }
+  }
+
+  function recruiterExtractHeadline() {
+    try {
+      const el = safeQuery('[data-test-row-lockup-headline]');
+      return safeText(el);
+    } catch { return null; }
+  }
+
+  function recruiterExtractLocation() {
+    try {
+      const el = safeQuery('[data-test-row-lockup-location]');
+      const text = safeText(el);
+      // Strip leading "· " prefix that LinkedIn Recruiter adds
+      return text ? text.replace(/^[\u00b7\u2022\u00b7\xb7]\s*/, '').trim() : null;
+    } catch { return null; }
+  }
+
+  function recruiterExtractPhotoUrl() {
+    try {
+      const img = safeQuery('img[data-test-lockup-image]');
+      return img ? img.src || null : null;
+    } catch { return null; }
+  }
+
+  function recruiterExtractConnectionDegree() {
+    try {
+      const el = safeQuery('.artdeco-entity-lockup__degree');
+      const text = safeText(el);
+      // Strip "· " or "·\u00a0" prefix
+      return text ? text.replace(/^[\u00b7\xb7\u2022]\u00a0?/, '').trim() : null;
+    } catch { return null; }
+  }
+
+  function recruiterExtractConnections() {
+    try {
+      const el = safeQuery('[data-test-topcard-condensed-lockup-connection-count]');
+      return safeText(el);
+    } catch { return null; }
+  }
+
+  function recruiterExtractAbout() {
+    try {
+      const el = safeQuery('[data-test-summary-card-text] .text-highlighter__text')
+        || safeQuery('[data-test-summary-card-text]');
+      return safeText(el);
+    } catch { return null; }
+  }
+
+  function recruiterExtractPublicUrl() {
+    try {
+      const el = safeQuery('[data-test-personal-info-profile-link]');
+      if (el && el.href) return normalizeProfileUrl(el.href);
+      return null;
+    } catch { return null; }
+  }
+
+  function recruiterParseExperienceItems() {
+    try {
+      const items = [];
+      const positionItems = safeQueryAll('[data-test-position-entity]');
+      for (const item of positionItems) {
+        try {
+          const titleEl = safeQuery('[data-test-position-entity-title] .text-highlighter__text', item)
+            || safeQuery('[data-test-position-entity-title]', item);
+          const title = safeText(titleEl);
+          if (!title) continue;
+          const companyEl = safeQuery('[data-test-position-entity-company-name] .text-highlighter__text', item)
+            || safeQuery('[data-test-position-entity-company-name]', item);
+          const company = safeText(companyEl);
+          const dateEl = safeQuery('[data-test-position-entity-date-range]', item);
+          const dates = safeText(dateEl);
+          const descEl = safeQuery('[data-test-position-entity-description] .text-highlighter__text', item)
+            || safeQuery('[data-test-position-entity-description]', item);
+          const description = safeText(descEl);
+          items.push({ title, company, dates, description });
+        } catch {}
+      }
+      return items;
+    } catch { return []; }
+  }
+
+  function recruiterParseEducationItems() {
+    try {
+      const items = [];
+      const educationItems = safeQueryAll('[data-test-education-item]');
+      for (const item of educationItems) {
+        try {
+          const institutionEl = safeQuery('[data-test-education-entity-school-name] .text-highlighter__text', item)
+            || safeQuery('[data-test-education-entity-school-name]', item);
+          const institution = safeText(institutionEl);
+          if (!institution) continue;
+          const degreeEl = safeQuery('[data-test-education-entity-degree]', item);
+          const degree = safeText(degreeEl);
+          const dateEl = safeQuery('[data-test-education-entity-date-range]', item);
+          const dates = safeText(dateEl);
+          items.push({ institution, degree, dates });
+        } catch {}
+      }
+      return items;
+    } catch { return []; }
+  }
+
+  async function recruiterExpandAndParseSkills() {
+    try {
+      const expandBtn = safeQuery('[data-test-profile-skills-card] [data-test-expand-more-lower-button]');
+      if (expandBtn) {
+        try { expandBtn.click(); } catch {}
+        await sleep(800);
+      }
+      return safeQueryAll('[data-test-skill-entity-skill-name]').map(el => safeText(el)).filter(Boolean);
+    } catch { return []; }
+  }
+
+  async function extractRecruiterProfileData() {
+    const publicUrl = recruiterExtractPublicUrl();
+    const linkedinUrl = publicUrl || window.location.href.split('?')[0];
+    const name = recruiterExtractName();
+    const headline = recruiterExtractHeadline();
+    const location = recruiterExtractLocation();
+    const photoUrl = recruiterExtractPhotoUrl();
+    const connectionDegree = recruiterExtractConnectionDegree();
+    const connections = recruiterExtractConnections();
+    const about = recruiterExtractAbout();
+    const workHistory = recruiterParseExperienceItems();
+    const education = recruiterParseEducationItems();
+    const skills = await recruiterExpandAndParseSkills();
+    const currentEntry = workHistory[0] || {};
+    return {
+      linkedinUrl,
+      fullName: name,
+      headline,
+      location,
+      photoUrl,
+      about,
+      connectionDegree,
+      followers: null,
+      connections,
+      currentTitle: currentEntry.title || null,
+      currentCompany: currentEntry.company || null,
+      workHistory: workHistory.length ? JSON.stringify(workHistory) : null,
+      education: education.length ? JSON.stringify(education) : null,
+      skills: skills.length ? JSON.stringify(skills) : null,
+    };
+  }
+
   async function extractProfileData() {
+    if (isRecruiterPage()) return extractRecruiterProfileData();
     const profileUrl = normalizeProfileUrl(window.location.href);
 
     // Extract all stable fields from the main page before any navigation
@@ -397,25 +551,42 @@
     return /linkedin\.com\/in\//.test(window.location.href);
   }
 
+  function isRecruiterPage() {
+    return /linkedin\.com\/talent\/profile\//.test(window.location.href);
+  }
+
+  function isAnyProfilePage() {
+    return isProfilePage() || isRecruiterPage();
+  }
+
+  function normalizeAnyProfileUrl(href) {
+    const inMatch = href.match(/https?:\/\/(?:www\.)?linkedin\.com\/in\/([^/?#]+)/);
+    if (inMatch) return `https://www.linkedin.com/in/${inMatch[1]}/`;
+    const talentMatch = href.match(/https?:\/\/(?:www\.)?linkedin\.com\/talent\/profile\/([^/?#]+)/);
+    if (talentMatch) return `https://www.linkedin.com/talent/profile/${talentMatch[1]}/`;
+    return href.split('?')[0];
+  }
+
   function scheduleSync() {
     if (extractionTimeout) clearTimeout(extractionTimeout);
-    // Wait for profile content to load (h1 must be present)
     extractionTimeout = setTimeout(async () => {
-      const h1 = document.querySelector('h1');
-      if (!h1 || !h1.innerText.trim()) {
-        // Retry once more after another second
-        await sleep(1500);
+      if (isRecruiterPage()) {
+        const nameEl = document.querySelector('[data-test-row-lockup-full-name]');
+        if (!nameEl || !nameEl.innerText.trim()) await sleep(1500);
+      } else {
+        const h1 = document.querySelector('h1');
+        if (!h1 || !h1.innerText.trim()) await sleep(1500);
       }
-      if (isProfilePage()) {
+      if (isAnyProfilePage()) {
         runSync();
       }
     }, 1500);
   }
 
   function init() {
-    if (!isProfilePage() || !extensionEnabled) return;
+    if (!isAnyProfilePage() || !extensionEnabled) return;
 
-    lastUrl = normalizeProfileUrl(window.location.href);
+    lastUrl = normalizeAnyProfileUrl(window.location.href);
 
     // If we just navigated back from the experience detail page and it caused
     // a full page reload, skip the auto-sync to break the loop.
@@ -431,10 +602,10 @@
     }
 
     observer = new MutationObserver(() => {
-      const currentNormalized = normalizeProfileUrl(window.location.href);
+      const currentNormalized = normalizeAnyProfileUrl(window.location.href);
       if (currentNormalized !== lastUrl) {
         lastUrl = currentNormalized;
-        if (isProfilePage()) {
+        if (isAnyProfilePage()) {
           scheduleSync();
         }
       }
@@ -455,7 +626,7 @@
       if (indicator && document.body.contains(indicator)) {
         indicator.style.display = 'none';
       }
-    } else if (isProfilePage()) {
+    } else if (isAnyProfilePage()) {
       if (indicator) indicator.style.display = '';
       init();
     }

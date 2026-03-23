@@ -127,7 +127,7 @@ async function syncToAirtable(profileData) {
       });
 
       const recordId = result.records?.[0]?.id;
-      await saveLastSync({ profileUrl, action: 'created', recordId, timestamp: now });
+      await saveLastSync({ profileUrl, action: 'created', recordId, timestamp: now, profileData });
       return { action: 'created', recordId };
     } catch (err) {
       return { error: `Create failed: ${err.message}` };
@@ -173,7 +173,7 @@ async function syncToAirtable(profileData) {
         fields: patch,
       });
 
-      await saveLastSync({ profileUrl, action: 'updated', recordId, timestamp: now });
+      await saveLastSync({ profileUrl, action: 'updated', recordId, timestamp: now, profileData });
       return { action: 'updated', recordId };
     } catch (err) {
       return { error: `Update failed: ${err.message}` };
@@ -188,6 +188,44 @@ async function saveLastSync(data) {
   });
 }
 
+// ── Lancor sync ────────────────────────────────────────────────────────────
+async function syncToLancor(profileData) {
+  const config = await loadConfig();
+  const baseUrl = (config.recruitmentAppUrl || 'http://localhost:3000').replace(/\/$/, '');
+
+  let workHistoryParsed = [];
+  if (profileData.workHistory) {
+    try {
+      workHistoryParsed = typeof profileData.workHistory === 'string'
+        ? JSON.parse(profileData.workHistory)
+        : profileData.workHistory;
+    } catch {}
+  }
+
+  // Clean title: take only the first segment before " | " or " · "
+  const rawTitle = profileData.currentTitle || '';
+  const cleanTitle = rawTitle.split(/\s*[|·]\s*/)[0].trim();
+
+  const payload = {
+    fullName:       profileData.fullName       || '',
+    currentTitle:   cleanTitle,
+    currentCompany: profileData.currentCompany || '',
+    location:       profileData.location       || '',
+    linkedinUrl:    profileData.linkedinUrl    || '',
+    workHistory:    workHistoryParsed,
+  };
+
+  const res = await fetch(`${baseUrl}/api/candidates/prefill`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+  return json; // { action: 'created'|'updated', id }
+}
+
 // ── Message handler ────────────────────────────────────────────────────────
 // Process immediately — content.js already debounces before sending.
 // No setTimeout here: MV3 service workers can be terminated before a delayed
@@ -195,9 +233,29 @@ async function saveLastSync(data) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type !== 'SYNC_PROFILE') return false;
 
-  syncToAirtable(message.data)
-    .then(result => sendResponse(result))
-    .catch(err => sendResponse({ error: err.message }));
+  async function handleSync() {
+    const now = new Date().toISOString();
+
+    // Always attempt Lancor sync (independent of Airtable config)
+    const lancorResult = await syncToLancor(message.data).catch(e => ({ error: e.message }));
+
+    // Attempt Airtable sync (only succeeds if configured)
+    const airtableResult = await syncToAirtable(message.data).catch(e => ({ error: e.message }));
+
+    // Persist combined result for popup to read
+    await saveLastSync({
+      profileUrl:    message.data.linkedinUrl,
+      action:        lancorResult.action || airtableResult.action || 'unknown',
+      lancorResult,
+      airtableResult,
+      timestamp:     now,
+      profileData:   message.data,
+    });
+
+    return { lancorResult, airtableResult };
+  }
+
+  handleSync().then(result => sendResponse(result)).catch(err => sendResponse({ error: err.message }));
 
   // Return true to keep the message channel open for the async response
   return true;

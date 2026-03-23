@@ -97,10 +97,68 @@
       text-decoration: none;
     }
     .btn-settings:hover { background: #deeefb; }
+    .recruit-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #eee;
+    }
+    .recruit-section h4 {
+      margin: 0 0 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #444;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .recruit-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 3px;
+      margin-top: 8px;
+    }
+    .recruit-label:first-of-type { margin-top: 0; }
+    .recruit-select {
+      width: 100%;
+      padding: 5px 7px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #1d2129;
+      background: #fff;
+    }
+    .recruit-select.error { border-color: #e57373; color: #b71c1c; }
+    .btn-send {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      padding: 7px 0;
+      background: #5C2D91;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-send:hover:not(:disabled) { background: #4a2274; }
+    .btn-send:disabled { opacity: 0.6; cursor: default; }
+    .send-status {
+      font-size: 11px;
+      margin-top: 6px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: none;
+    }
+    .send-status.ok   { display: block; background: #e8f5e9; color: #1b5e20; }
+    .send-status.fail { display: block; background: #fdecea; color: #b71c1c; }
   </style>
 </head>
 <body>
-  <h3>ATS LinkedIn Scraper</h3>
+  <h3 style="color:#5C2D91;">Lancor Search OS</h3>
+  <div id="lancorStatusBox" class="status-box idle" style="margin-bottom:8px;">Lancor: waiting for sync…</div>
 
   <div class="toggle-row">
     <span class="toggle-label">Auto-sync enabled</span>
@@ -114,6 +172,16 @@
   <div id="metaInfo" class="meta"></div>
   <div id="recordId" class="record-id"></div>
   <a class="btn-settings" id="optionsLink">Open Settings</a>
+
+  <div id="recruitSection" class="recruit-section" style="display:none">
+    <h4>Add to Lancor Search</h4>
+    <label class="recruit-label" for="employerSelect">Current Employer</label>
+    <select id="employerSelect" class="recruit-select"></select>
+    <label class="recruit-label" for="searchSelect">Search Project</label>
+    <select id="searchSelect" class="recruit-select"></select>
+    <button id="sendToRecruitBtn" class="btn-send">Add to Active Search</button>
+    <div id="sendStatus" class="send-status"></div>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>
