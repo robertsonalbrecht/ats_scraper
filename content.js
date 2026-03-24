@@ -194,38 +194,129 @@
   async function expandSection(sectionEl) {
     if (!sectionEl) return;
     try {
-      const btns = safeQueryAll(
+      // Click section-level "show more" buttons (show all entries)
+      const sectionBtns = safeQueryAll(
         'button[aria-label*="more"], button[aria-label*="More"]',
         sectionEl
       );
-      btns.forEach(btn => {
-        try { btn.click(); } catch {}
-      });
+      sectionBtns.forEach(btn => { try { btn.click(); } catch {} });
       await sleep(800);
+
+      // Click individual description "see more" buttons so full text lands in DOM
+      const descBtns = safeQueryAll(
+        'button.inline-show-more-text__button, button[class*="inline-show-more-text"]',
+        sectionEl
+      );
+      descBtns.forEach(btn => { try { btn.click(); } catch {} });
+      if (descBtns.length) await sleep(500);
     } catch {}
   }
+
+  function extractDescription(el) {
+    // Strategy: find span[aria-hidden="true"] that isn't a title, company, or date.
+    // Descriptions are the long-form text — typically >30 chars and not inside
+    // .t-bold (title) or .t-14 (company/date/location) containers.
+    const allSpans = safeQueryAll('span[aria-hidden="true"]', el);
+    for (const span of allSpans) {
+      // Skip if inside a title or metadata line
+      if (span.closest('.t-bold') || span.closest('.t-14')) continue;
+      const text = safeText(span);
+      if (text && text.length > 20) return text;
+    }
+    return null;
+  }
+
+  function extractLogoUrl(el) {
+    const img = safeQuery('img', el);
+    if (!img || !img.src || img.src.startsWith('data:')) return null;
+    return img.src;
+  }
+
+  function cleanCompanyName(raw) {
+    // Strip employment type suffix: "Google · Full-time" → "Google"
+    if (!raw) return null;
+    return raw.split(/\s*·\s*/)[0].trim() || raw;
+  }
+
+  function parseDatesAndDuration(raw) {
+    // "Jan 2020 - Present · 3 yrs 2 mos" → { dates, duration }
+    if (!raw) return { dates: null, duration: null };
+    const parts = raw.split(/\s*·\s*/);
+    if (parts.length >= 2) {
+      return { dates: parts[0].trim() || null, duration: parts[1].trim() || null };
+    }
+    // Check if the whole string is just a duration (e.g. "3 yrs 2 mos")
+    if (/^\d+\s*(yr|mo)/i.test(raw.trim())) {
+      return { dates: null, duration: raw.trim() };
+    }
+    return { dates: raw.trim() || null, duration: null };
+  }
+
+  // Selector for list items — LinkedIn uses different classes on main profile vs detail page
+  const LI_SELECTOR = 'li.artdeco-list__item, li.pvs-list__paged-list-item';
 
   function parseExperienceItems(sectionEl) {
     try {
       const items = [];
-      const listItems = safeQueryAll('li.artdeco-list__item', sectionEl);
+      if (!sectionEl) return items;
 
-      for (const li of listItems) {
+      // Get all list items, then filter to top-level only
+      const allListItems = safeQueryAll(LI_SELECTOR, sectionEl);
+      const topLevelItems = allListItems.filter(li => {
+        const parentLi = li.parentElement?.closest(LI_SELECTOR);
+        return !parentLi || !sectionEl.contains(parentLi);
+      });
+
+      for (const li of topLevelItems) {
         try {
-          const titleEl = safeQuery('.t-bold span[aria-hidden="true"]', li);
-          const title = safeText(titleEl);
-          if (!title) continue; // skip non-content items
+          // Detect grouped (multi-role) entry by looking for ANY nested li
+          // with its own bold title inside nested ul elements
+          const childRoles = [];
+          for (const ul of safeQueryAll('ul', li)) {
+            for (const child of safeQueryAll(':scope > li', ul)) {
+              if (safeQuery('.t-bold span[aria-hidden="true"]', child)) {
+                childRoles.push(child);
+              }
+            }
+          }
 
-          const companyEl = safeQuery('.t-14.t-normal span[aria-hidden="true"]', li);
-          const company = safeText(companyEl);
+          if (childRoles.length > 0) {
+            // GROUPED ENTRY: parent holds company name, children hold individual roles
+            const company = cleanCompanyName(
+              safeText(safeQuery('.t-bold span[aria-hidden="true"]', li))
+            );
+            const logoUrl = extractLogoUrl(li);
 
-          const dateEl = safeQuery('.t-14.t-normal.t-black--light span[aria-hidden="true"]', li);
-          const dates = safeText(dateEl);
+            for (const child of childRoles) {
+              const title = safeText(safeQuery('.t-bold span[aria-hidden="true"]', child));
+              if (!title) continue;
 
-          const descEl = safeQuery('.pvs-list__outer-container', li);
-          const description = safeText(descEl);
+              const rawDates = safeText(
+                safeQuery('.t-14.t-normal.t-black--light span[aria-hidden="true"]', child)
+              );
+              const { dates, duration } = parseDatesAndDuration(rawDates);
+              const description = extractDescription(child);
 
-          items.push({ title, company, dates, description });
+              items.push({ title, company, dates, duration, description, logoUrl });
+            }
+          } else {
+            // SINGLE ROLE ENTRY
+            const title = safeText(safeQuery('.t-bold span[aria-hidden="true"]', li));
+            if (!title) continue;
+
+            const company = cleanCompanyName(
+              safeText(safeQuery('.t-14.t-normal span[aria-hidden="true"]', li))
+            );
+
+            const rawDates = safeText(
+              safeQuery('.t-14.t-normal.t-black--light span[aria-hidden="true"]', li)
+            );
+            const { dates, duration } = parseDatesAndDuration(rawDates);
+            const logoUrl = extractLogoUrl(li);
+            const description = extractDescription(li);
+
+            items.push({ title, company, dates, duration, description, logoUrl });
+          }
         } catch {}
       }
       return items;
