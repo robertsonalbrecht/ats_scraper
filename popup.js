@@ -4,13 +4,22 @@ document.getElementById('optionsLink').addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });
 
-// Enable/disable toggle
-const toggle = document.getElementById('enableToggle');
-chrome.storage.local.get(['enabled'], (result) => {
-  toggle.checked = result.enabled !== false; // default on
+// Auto-sync toggle
+const autoSyncToggle = document.getElementById('autoSyncToggle');
+chrome.storage.local.get(['autoSync'], (result) => {
+  autoSyncToggle.checked = result.autoSync !== false; // default on
 });
-toggle.addEventListener('change', () => {
-  chrome.storage.local.set({ enabled: toggle.checked });
+autoSyncToggle.addEventListener('change', () => {
+  chrome.storage.local.set({ autoSync: autoSyncToggle.checked });
+});
+
+// Show sync button toggle
+const showBtnToggle = document.getElementById('showButtonToggle');
+chrome.storage.local.get(['showSyncButton'], (result) => {
+  showBtnToggle.checked = result.showSyncButton !== false; // default on
+});
+showBtnToggle.addEventListener('change', () => {
+  chrome.storage.local.set({ showSyncButton: showBtnToggle.checked });
 });
 
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -76,6 +85,29 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     }
     if (sync.recordId) {
       recordEl.textContent = `Record: ${sync.recordId}`;
+    }
+
+    // ── Field capture indicators ──────────────────────────────────────────
+    if (sync.profileData) {
+      const pd = sync.profileData;
+      const fields = [
+        { label: 'Name', ok: !!pd.fullName },
+        { label: 'Location', ok: !!pd.location },
+        { label: 'Photo', ok: !!pd.photoUrl },
+        { label: 'Work History', ok: !!pd.workHistory }
+      ];
+      const missing = fields.filter(f => !f.ok);
+      const indicatorEl = document.getElementById('fieldIndicators');
+      if (indicatorEl) {
+        if (missing.length === 0) {
+          indicatorEl.innerHTML = '<span style="color:#2e7d32;font-size:11px">✓ All fields captured</span>';
+        } else {
+          indicatorEl.innerHTML = missing.map(f =>
+            `<span style="color:#c62828;font-size:11px">⚠ ${f.label} not captured</span>`
+          ).join('<br>');
+        }
+        indicatorEl.style.display = 'block';
+      }
     }
 
     // Show recruitment section whenever we have a sync for this profile

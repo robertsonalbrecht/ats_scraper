@@ -23,13 +23,14 @@ const DEFAULT_FIELD_MAP = {
 async function loadConfig() {
   return new Promise((resolve) => {
     chrome.storage.local.get(
-      ['apiKey', 'baseId', 'tableId', 'fieldMap'],
+      ['apiKey', 'baseId', 'tableId', 'fieldMap', 'recruitmentAppUrl'],
       (items) => {
         resolve({
-          apiKey:   items.apiKey   || null,
-          baseId:   items.baseId   || null,
-          tableId:  items.tableId  || null,
-          fieldMap: items.fieldMap || DEFAULT_FIELD_MAP,
+          apiKey:            items.apiKey            || null,
+          baseId:            items.baseId            || null,
+          tableId:           items.tableId           || null,
+          fieldMap:          items.fieldMap          || DEFAULT_FIELD_MAP,
+          recruitmentAppUrl: items.recruitmentAppUrl || null,
         });
       }
     );
@@ -154,7 +155,7 @@ async function syncToAirtable(profileData) {
       };
 
       // These fields are always overwritten so the most complete scraped data wins
-      const alwaysUpdate = new Set(['workHistory', 'education', 'skills']);
+      const alwaysUpdate = new Set(['workHistory', 'education', 'skills', 'location']);
 
       for (const [key, newValue] of Object.entries(mapping)) {
         const fieldName = fieldMap[key];
@@ -212,6 +213,7 @@ async function syncToLancor(profileData) {
     currentCompany: profileData.currentCompany || '',
     location:       profileData.location       || '',
     linkedinUrl:    profileData.linkedinUrl    || '',
+    photoUrl:       profileData.photoUrl       || '',
     workHistory:    workHistoryParsed,
   };
 
@@ -255,8 +257,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return { lancorResult, airtableResult };
   }
 
-  handleSync().then(result => sendResponse(result)).catch(err => sendResponse({ error: err.message }));
+  handleSync().then(result => {
+    logSyncResult(message.data.linkedinUrl, 'success', result);
+    sendResponse(result);
+  }).catch(err => {
+    logSyncResult(message.data.linkedinUrl, 'error', err.message);
+    sendResponse({ error: err.message });
+  });
 
   // Return true to keep the message channel open for the async response
   return true;
 });
+
+// ── Sync logging (persists last 20 results for debugging) ────────────────────
+
+async function logSyncResult(url, status, detail) {
+  try {
+    const { syncLog = [] } = await chrome.storage.local.get(['syncLog']);
+    syncLog.unshift({
+      url: url || 'unknown',
+      status,
+      detail: typeof detail === 'string' ? detail : JSON.stringify(detail).slice(0, 200),
+      timestamp: new Date().toISOString()
+    });
+    // Keep only last 20 entries
+    if (syncLog.length > 20) syncLog.length = 20;
+    await chrome.storage.local.set({ syncLog });
+  } catch { /* ignore storage errors */ }
+}
