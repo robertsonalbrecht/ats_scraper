@@ -92,6 +92,10 @@
   <input type="text" id="recruitmentAppUrl" placeholder="http://localhost:3000">
   <p class="hint">Base URL of your Lancor Recruitment App. Used by the popup to fetch active searches and send candidates.</p>
 
+  <label for="recruitmentAppToken">API Token</label>
+  <input type="password" id="recruitmentAppToken" placeholder="Paste the value of CHROME_EXTENSION_TOKEN">
+  <p class="hint">Must match the <code>CHROME_EXTENSION_TOKEN</code> env var on the recruitment app server. Required when the app has authentication enabled.</p>
+
   <h2>Airtable Credentials</h2>
 
   <label for="apiKey">Personal Access Token</label>

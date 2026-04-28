@@ -23,14 +23,15 @@ const DEFAULT_FIELD_MAP = {
 async function loadConfig() {
   return new Promise((resolve) => {
     chrome.storage.local.get(
-      ['apiKey', 'baseId', 'tableId', 'fieldMap', 'recruitmentAppUrl'],
+      ['apiKey', 'baseId', 'tableId', 'fieldMap', 'recruitmentAppUrl', 'recruitmentAppToken'],
       (items) => {
         resolve({
-          apiKey:            items.apiKey            || null,
-          baseId:            items.baseId            || null,
-          tableId:           items.tableId           || null,
-          fieldMap:          items.fieldMap          || DEFAULT_FIELD_MAP,
-          recruitmentAppUrl: items.recruitmentAppUrl || null,
+          apiKey:              items.apiKey              || null,
+          baseId:              items.baseId              || null,
+          tableId:             items.tableId             || null,
+          fieldMap:            items.fieldMap            || DEFAULT_FIELD_MAP,
+          recruitmentAppUrl:   items.recruitmentAppUrl   || null,
+          recruitmentAppToken: items.recruitmentAppToken || null,
         });
       }
     );
@@ -217,9 +218,11 @@ async function syncToLancor(profileData) {
     workHistory:    workHistoryParsed,
   };
 
+  const headers = { 'Content-Type': 'application/json' };
+  if (config.recruitmentAppToken) headers['X-API-Token'] = config.recruitmentAppToken;
   const res = await fetch(`${baseUrl}/api/candidates/prefill`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
 

@@ -36,9 +36,10 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     return;
   }
 
-  chrome.storage.local.get(['lastSync', 'recruitmentAppUrl'], (result) => {
+  chrome.storage.local.get(['lastSync', 'recruitmentAppUrl', 'recruitmentAppToken'], (result) => {
     const sync = result.lastSync;
     const recruitmentAppUrl = (result.recruitmentAppUrl || 'http://localhost:3000').replace(/\/$/, '');
+    const recruitmentAppToken = result.recruitmentAppToken || '';
 
     // ── Lancor status ──────────────────────────────────────────────────────
     if (lancorBox) {
@@ -115,14 +116,14 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const hasLancorSync = sync.lancorResult && !sync.lancorResult.error;
     const profileMatch = !sync.profileUrl || sync.profileUrl === profileUrl;
     if (profileMatch && (hasLancorSync || sync.action)) {
-      showRecruitSection(sync, recruitmentAppUrl);
+      showRecruitSection(sync, recruitmentAppUrl, recruitmentAppToken);
     }
   });
 });
 
 // ── Recruitment App section ────────────────────────────────────────────────
 
-function showRecruitSection(sync, recruitmentAppUrl) {
+function showRecruitSection(sync, recruitmentAppUrl, recruitmentAppToken) {
   const section = document.getElementById('recruitSection');
   section.style.display = 'block';
 
@@ -172,15 +173,15 @@ function showRecruitSection(sync, recruitmentAppUrl) {
 
   // Fetch search projects
   const searchSelect = document.getElementById('searchSelect');
-  fetchSearchProjects(recruitmentAppUrl, searchSelect);
+  fetchSearchProjects(recruitmentAppUrl, recruitmentAppToken, searchSelect);
 
   // Wire up send button
   document.getElementById('sendToRecruitBtn').addEventListener('click', () => {
-    sendToRecruitApp(sync, activeRoles, recruitmentAppUrl);
+    sendToRecruitApp(sync, activeRoles, recruitmentAppUrl, recruitmentAppToken);
   });
 }
 
-async function fetchSearchProjects(recruitmentAppUrl, searchSelect) {
+async function fetchSearchProjects(recruitmentAppUrl, recruitmentAppToken, searchSelect) {
   searchSelect.innerHTML = '';
   searchSelect.className = 'recruit-select';
   const loadOpt = document.createElement('option');
@@ -189,7 +190,8 @@ async function fetchSearchProjects(recruitmentAppUrl, searchSelect) {
   searchSelect.appendChild(loadOpt);
 
   try {
-    const res = await fetch(`${recruitmentAppUrl}/api/searches/active`);
+    const headers = recruitmentAppToken ? { 'X-API-Token': recruitmentAppToken } : {};
+    const res = await fetch(`${recruitmentAppUrl}/api/searches/active`, { headers });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const searches = await res.json();
 
@@ -218,7 +220,7 @@ async function fetchSearchProjects(recruitmentAppUrl, searchSelect) {
   }
 }
 
-async function sendToRecruitApp(sync, activeRoles, recruitmentAppUrl) {
+async function sendToRecruitApp(sync, activeRoles, recruitmentAppUrl, recruitmentAppToken) {
   const btn = document.getElementById('sendToRecruitBtn');
   const statusEl = document.getElementById('sendStatus');
   const employerSelect = document.getElementById('employerSelect');
@@ -254,9 +256,11 @@ async function sendToRecruitApp(sync, activeRoles, recruitmentAppUrl) {
   };
 
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (recruitmentAppToken) headers['X-API-Token'] = recruitmentAppToken;
     const res = await fetch(`${recruitmentAppUrl}/api/candidates/prefill`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
 
